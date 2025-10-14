@@ -1,0 +1,14 @@
+dataset
+**/*.pt
+**/checkpoints
+**/wget-log
+**/_build/
+**/*.ckpt
+**/outputs
+**/*.tar.gz
+**/playground
+**/wandb
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+**cache/

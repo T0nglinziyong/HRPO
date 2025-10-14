@@ -77,6 +77,10 @@ from triton import __version__ as triton_version
 HAS_XFORMERS = xformers is not None
 BlockDiagonalCausalMask = xformers.attn_bias.BlockDiagonalCausalMask if HAS_XFORMERS else None
 
+current_script_path = os.path.abspath(__file__)
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_script_path)))
+sys.path.append(project_root)
+import global_vars
 
 def original_apply_qkv(self, X):
     Q = self.q_proj(X)
@@ -663,9 +667,13 @@ def LlamaModel_fast_forward(
     thinking_mask = kwargs.get('thinking_mask')
     if thinking_mask is not None:
         new_inputs_embeds = inputs_embeds.clone()
-        new_inputs_embeds[thinking_mask] = self.thinking_residual(
-            inputs_embeds[thinking_mask], thinking_embeds[thinking_mask],
-        )[0].to(inputs_embeds.dtype)
+        if global_vars.SETTING == "hrpo":
+            new_inputs_embeds[thinking_mask] = self.thinking_residual(
+                inputs_embeds[thinking_mask], thinking_embeds[thinking_mask],
+            )[0].to(inputs_embeds.dtype)
+        elif global_vars.SETTING == "interpolation":
+            new_inputs_embeds[thinking_mask] = thinking_embeds[thinking_mask].to(inputs_embeds.dtype)
+
         inputs_embeds = new_inputs_embeds
 
     inputs_embeds = inputs_embeds.to(_get_dtype(self.config.torch_dtype))
@@ -941,12 +949,19 @@ def LlamaModel_fast_forward_inference(
     last_thinking_states = kwargs.get('last_thinking_states')
     if is_thinking is not None and last_thinking_states is not None:
         thinking_embeds = last_thinking_states
-        X_hat, a_t = self.model.thinking_residual(
-            X, last_thinking_states.unsqueeze(1),
-        )
-        embeds_ratio = a_t.mean(-1).squeeze()
-        embeds_ratio[~torch.tensor(is_thinking)] = 1.
-        X[is_thinking] = X_hat[is_thinking].to(X.dtype)
+        if global_vars.SETTING == "hrpo":
+            X_hat, a_t = self.model.thinking_residual(
+                X, last_thinking_states.unsqueeze(1),
+            )
+            embeds_ratio = a_t.mean(-1).squeeze()
+            embeds_ratio[~torch.tensor(is_thinking)] = 1.
+            X[is_thinking] = X_hat[is_thinking].to(X.dtype)
+        elif global_vars.SETTING == "interpolation":
+            X[is_thinking] = thinking_embeds.unsqueeze(1)[is_thinking].to(X.dtype)
+            embeds_ratio = torch.zeros((bsz,), dtype = torch.float32, device = "cuda:0")
+            embeds_ratio[~torch.tensor(is_thinking)] = 1.
+        else:
+            embeds_ratio = torch.ones((bsz,), dtype = torch.float32, device = "cuda:0")
 
 
     bsz, q_len, hd = X.shape

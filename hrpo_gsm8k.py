@@ -11,7 +11,7 @@ from patch import patch_trainer_optimizer
 from utils import *
 
 os.environ["WANDB_PROJECT"] = "latent-reasoning"
-
+import global_vars
 
 def preprocess_gsm8k(split="train", chunk_size=1000) -> Dataset:
     dataset = load_dataset('openai/gsm8k', 'main')[split]
@@ -20,18 +20,20 @@ def preprocess_gsm8k(split="train", chunk_size=1000) -> Dataset:
 
 
 def main(args):
-    exp_name = (f"./experiments/{args.model_name.split('/')[-1]}-gsm8k-group{args.group_size}"
+    exp_name = (f"experiments/{args.model_name.split('/')[-1]}-{args.setting}-gsm8k-group{args.group_size}"
                 f"-lora{args.lora_rank}-rmin{args.residual_r_min}-temp{args.temperature}")
     if os.path.exists(exp_name) and len(os.listdir(exp_name)) > 0:
         print(f"Experiment {exp_name} already exists. Exiting...")
         exit()
 
+    global_vars.SETTING = args.setting
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name = args.model_name,
         max_seq_length = args.max_prompt_length + args.max_completion_length,
         load_in_4bit = False,
         load_in_8bit = False,
         fast_inference = False,
+        full_finetuning = False,
     )
     model.answer_start = ANSWER_START
 
@@ -105,10 +107,11 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--setting", type=str, default="hrpo")
     parser.add_argument("--lora_rank", type=int, default=32)
 
     parser.add_argument("--lr", type=float, default=5e-6)
-    parser.add_argument("--beta", type=float, default=0.005)
+    parser.add_argument("--beta", type=float, default=0.005) # loss = (per_token_loss - beta * per_token_kl)
     parser.add_argument("--residual_r_min", type=float, default=0.99)
     parser.add_argument("--residual_r_max", type=float, default=0.999)
     parser.add_argument("--lr_residual_gate", type=float, default=1e-4)
@@ -122,11 +125,11 @@ if __name__ == "__main__":
     parser.add_argument("--group_size", type=int, default=4)
     parser.add_argument("--temperature", type=float, default=0.5)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=4)
-    parser.add_argument("--per_device_train_batch_size", type=int, default=8)
+    parser.add_argument("--per_device_train_batch_size", type=int, default=32)
     parser.add_argument("--max_prompt_length", type=int, default=1024)
     parser.add_argument("--max_completion_length", type=int, default=1024)
 
-    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-1.5B-Instruct")
+    parser.add_argument("--model_name", type=str, default="/home/linziyong/Desktop/Program/Reasoning/latentrl/checkpoints/base/Qwen2.5-0.5B-Instruct")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 

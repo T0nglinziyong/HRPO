@@ -12,7 +12,7 @@ from patch import patch_trainer_optimizer
 from utils import *
 
 os.environ["WANDB_PROJECT"] = "latent-reasoning"
-
+import global_vars
 
 def preprocess_math(split="train", chunk_size=1000, root='../MATH') -> Dataset:
     problems, solutions = [], []
@@ -33,18 +33,20 @@ def preprocess_math(split="train", chunk_size=1000, root='../MATH') -> Dataset:
 
 
 def main(args):
-    exp_name = (f"./experiments/{args.model_name.split('/')[-1]}-math-group{args.group_size}"
+    exp_name = (f"experiments/{args.model_name.split('/')[-1]}-{args.setting}-math-group{args.group_size}"
                 f"-lora{args.lora_rank}-rmin{args.residual_r_min}-temp{args.temperature}")
     if os.path.exists(exp_name) and len(os.listdir(exp_name)) > 0:
         print(f"Experiment {exp_name} already exists. Exiting...")
         exit()
 
+    global_vars.SETTING = args.setting
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name = args.model_name,
         max_seq_length = args.max_prompt_length + args.max_completion_length,
         load_in_4bit = False,
         load_in_8bit = False,
         fast_inference = False,
+        full_finetuning = False,
     )
     model.answer_start = ANSWER_START
 
@@ -118,6 +120,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--setting", type=str, default="hrpo")
     parser.add_argument("--lora_rank", type=int, default=32)
 
     parser.add_argument("--lr", type=float, default=5e-6)
@@ -135,7 +138,7 @@ if __name__ == "__main__":
     parser.add_argument("--group_size", type=int, default=8)
     parser.add_argument("--temperature", type=float, default=0.5)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=4)
-    parser.add_argument("--per_device_train_batch_size", type=int, default=16)
+    parser.add_argument("--per_device_train_batch_size", type=int, default=64)
     parser.add_argument("--max_prompt_length", type=int, default=1024)
     parser.add_argument("--max_completion_length", type=int, default=1024)
 
