@@ -12,7 +12,7 @@ from patch import patch_trainer_optimizer
 from utils import *
 
 os.environ["WANDB_PROJECT"] = "latent-reasoning"
-
+import global_vars
 
 def preprocess_mmlu(chunk_size=1000, root='../MMLU_Train_Merged') -> Dataset:
     dataset = Dataset.load_from_disk(root)
@@ -22,18 +22,21 @@ def preprocess_mmlu(chunk_size=1000, root='../MMLU_Train_Merged') -> Dataset:
 
 
 def main(args):
-    exp_name = (f"experiments/{args.model_name.split('/')[-1]}-mmlu-group{args.group_size}"
+    exp_name = (f"experiments/{args.model_name.split('/')[-1]}-{args.setting}-mmlu"
+                f"-group{args.group_size}-bs{args.per_device_train_batch_size}-length{args.max_completion_length}"
                 f"-lora{args.lora_rank}-rmin{args.residual_r_min}-temp{args.temperature}")
     if os.path.exists(exp_name) and len(os.listdir(exp_name)) > 0:
         print(f"Experiment {exp_name} already exists. Exiting...")
         exit()
 
+    global_vars.SETTING = args.setting
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name = args.model_name,
         max_seq_length = args.max_prompt_length + args.max_completion_length,
         load_in_4bit = False,
         load_in_8bit = False,
         fast_inference = False,
+        full_finetuning = False,
     )
     model.answer_start = ANSWER_START
 
@@ -107,6 +110,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--setting", type=str, default="hrpo")
     parser.add_argument("--lora_rank", type=int, default=32)
 
     parser.add_argument("--lr", type=float, default=5e-6)
